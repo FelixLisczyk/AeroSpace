@@ -228,6 +228,11 @@ final class MacWindow: Window {
         return false
     }
 
+    // Ignore Sunsama Focus Bar window. It often gets focused unintentionally.
+    if app.id == "com.sunsama.native-app" && axWindow.get(Ax.titleAttr) == "Sunsama Focus Bar" {
+        return false
+    }
+
     // Try to filter out incredibly weird popup like AXWindows without any buttons.
     // E.g.
     // - Sonoma (macOS 14) keyboard layout switch (AXSubrole == AXDialog)
