@@ -67,7 +67,7 @@ extension AXUIElement {
             return false
         }
 
-        if app.id == "com.sunsama.native-app" && axWindow.get(Ax.titleAttr) == "Sunsama Focus Bar" {
+        if appBundleId == "com.sunsama.native-app" && get(Ax.titleAttr) == "Sunsama Focus Bar" {
             return false
         }
 
