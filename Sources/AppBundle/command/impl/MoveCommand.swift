@@ -15,7 +15,7 @@ struct MoveCommand: Command {
                 let indexOfCurrent = currentWindow.ownIndex
                 let indexOfSiblingTarget = indexOfCurrent + direction.focusOffset
                 if parent.orientation == direction.orientation && parent.children.indices.contains(indexOfSiblingTarget) {
-                    switch parent.children[indexOfSiblingTarget].tilingTreeNodeCasesOrThrow() {
+                    switch parent.children[indexOfSiblingTarget].tilingTreeNodeCasesOrDie() {
                         case .tilingContainer(let topLevelSiblingTargetContainer):
                             deepMoveIn(window: currentWindow, into: topLevelSiblingTargetContainer, moveDirection: direction)
                         case .window: // "swap windows"
@@ -69,7 +69,7 @@ private let moveOutMacosUnconventionalWindow = "moving macOS fullscreen, minimiz
         case .macosPopupWindowsContainer:
             return false // Impossible
         case .window:
-            error("Window can't contain children nodes")
+            die("Window can't contain children nodes")
     }
 
     window.bind(
@@ -81,7 +81,7 @@ private let moveOutMacosUnconventionalWindow = "moving macOS fullscreen, minimiz
 }
 
 @MainActor private func deepMoveIn(window: Window, into container: TilingContainer, moveDirection: CardinalDirection) {
-    let deepTarget = container.tilingTreeNodeCasesOrThrow().findDeepMoveInTargetRecursive(moveDirection.orientation)
+    let deepTarget = container.tilingTreeNodeCasesOrDie().findDeepMoveInTargetRecursive(moveDirection.orientation)
     switch deepTarget {
         case .tilingContainer(let deepTarget):
             window.bind(to: deepTarget, adaptiveWeight: WEIGHT_AUTO, index: 0)
@@ -103,8 +103,8 @@ private extension TilingTreeNodeCases {
                 if container.orientation == orientation {
                     .tilingContainer(container)
                 } else {
-                    (container.mostRecentChild ?? errorT("Empty containers must be detached during normalization"))
-                        .tilingTreeNodeCasesOrThrow()
+                    (container.mostRecentChild ?? dieT("Empty containers must be detached during normalization"))
+                        .tilingTreeNodeCasesOrDie()
                         .findDeepMoveInTargetRecursive(orientation)
                 }
         }

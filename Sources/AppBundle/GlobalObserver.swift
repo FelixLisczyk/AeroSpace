@@ -10,17 +10,19 @@ class GlobalObserver {
             return
         }
         let notifName = notification.name.rawValue
-        MainActor.assumeIsolated {
-            refreshAndLayout(.globalObserver(notifName), screenIsDefinitelyUnlocked: false)
+        Task { @MainActor in
+            if !TrayMenuModel.shared.isEnabled { return }
+            runRefreshSession(.globalObserver(notifName), screenIsDefinitelyUnlocked: false)
         }
     }
 
     private static func onHideApp(_ notification: Notification) {
         check(Thread.isMainThread)
         let notifName = notification.name.rawValue
-        MainActor.assumeIsolated {
-            refreshSession(.globalObserver(notifName), screenIsDefinitelyUnlocked: false) {
-                if TrayMenuModel.shared.isEnabled && config.automaticallyUnhideMacosHiddenApps {
+        Task { @MainActor in
+            guard let token: RunSessionGuard = .isServerEnabled else { return }
+            try await runSession(.globalObserver(notifName), token) {
+                if config.automaticallyUnhideMacosHiddenApps {
                     if let w = prevFocus?.windowOrNil,
                        w.macAppUnsafe.nsApp.isHidden,
                        // "Hide others" (cmd-alt-h) -> don't force focus
@@ -29,7 +31,7 @@ class GlobalObserver {
                     {
                         // Force focus
                         _ = w.focusWindow()
-                        _ = w.nativeFocus()
+                        w.nativeFocus()
                     }
                     for app in MacApp.allAppsMap.values {
                         app.nsApp.unhide()
@@ -54,20 +56,23 @@ class GlobalObserver {
             // todo reduce number of refreshSession in the callback
             //  resetManipulatedWithMouseIfPossible might call its own refreshSession
             //  The end of the callback calls refreshSession
-            resetClosedWindowsCache()
-            resetManipulatedWithMouseIfPossible()
-            let mouseLocation = mouseLocation
-            let clickedMonitor = mouseLocation.monitorApproximation
-            switch () {
-                // Detect clicks on desktop of different monitors
-                case _ where clickedMonitor.activeWorkspace != focus.workspace:
-                    _ = refreshSession(.globalObserverLeftMouseUp, screenIsDefinitelyUnlocked: true) {
-                        clickedMonitor.activeWorkspace.focusWorkspace()
-                    }
-                // Detect close button clicks for unfocused windows. Yes, kAXUIElementDestroyedNotification is that unreliable
-                //  And trigger new window detection that could be delayed due to mouseDown event
-                default:
-                    refreshAndLayout(.globalObserverLeftMouseUp, screenIsDefinitelyUnlocked: true)
+            Task { @MainActor in
+                guard let token: RunSessionGuard = .isServerEnabled else { return }
+                resetClosedWindowsCache()
+                try await resetManipulatedWithMouseIfPossible()
+                let mouseLocation = mouseLocation
+                let clickedMonitor = mouseLocation.monitorApproximation
+                switch () {
+                    // Detect clicks on desktop of different monitors
+                    case _ where clickedMonitor.activeWorkspace != focus.workspace:
+                        _ = try await runSession(.globalObserverLeftMouseUp, token) {
+                            clickedMonitor.activeWorkspace.focusWorkspace()
+                        }
+                    // Detect close button clicks for unfocused windows. Yes, kAXUIElementDestroyedNotification is that unreliable
+                    //  And trigger new window detection that could be delayed due to mouseDown event
+                    default:
+                        runRefreshSession(.globalObserverLeftMouseUp, screenIsDefinitelyUnlocked: true)
+                }
             }
         }
     }

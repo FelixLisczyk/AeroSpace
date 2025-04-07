@@ -4,11 +4,14 @@ import Foundation
 
 public let unixUserName = NSUserName()
 public let mainModeId = "main"
-private let recursionDetectorDuringTermination = MyAtomicBool(false) // todo change to Ctx?
 
-// public var refreshSessionEventForDebug: RefreshSessionEvent? = nil
+@TaskLocal
+public var refreshSessionEventForDebug: RefreshSessionEvent? = nil
 
-public func errorT<T>(
+@TaskLocal
+private var recursionDetectorDuringTermination = false
+
+public func dieT<T>(
     _ __message: String = "",
     file: String = #fileID,
     line: Int = #line,
@@ -16,6 +19,7 @@ public func errorT<T>(
     function: String = #function
 ) -> T {
     let _message = __message.contains("\n") ? "\n" + __message.indent() : __message
+    let thread = Thread.current
     let message =
         """
         Please report to:
@@ -25,36 +29,44 @@ public func errorT<T>(
         Message: \(_message)
         Version: \(aeroSpaceAppVersion)
         Git hash: \(gitHash)
+        refreshSessionEvent: \(refreshSessionEventForDebug.optionalToPrettyString())
         Date: \(Date.now)
+        Thread name: \(thread.name.optionalToPrettyString())
+        Is main thread: \(thread.isMainThread)
+        axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken.optionalToPrettyString())
         macOS version: \(ProcessInfo().operatingSystemVersionString)
         Coordinate: \(file):\(line):\(column) \(function)
-        recursionDetectorDuringTermination: \(recursionDetectorDuringTermination.get())
+        recursionDetectorDuringTermination: \(recursionDetectorDuringTermination)
         cli: \(isCli)
+        Monitor count: \(NSScreen.screens.count)
         Displays have separate spaces: \(NSScreen.screensHaveSeparateSpaces)
 
         Stacktrace:
         \(getStringStacktrace())
         """
-    // refreshSessionEvent: \(String(describing: refreshSessionEventForDebug)) // todo return back when introduce Ctx
     if !isUnitTest && isServer {
         showMessageInGui(
-            filenameIfConsoleApp: recursionDetectorDuringTermination.get()
+            filenameIfConsoleApp: recursionDetectorDuringTermination
                 ? "aerospace-runtime-error-recursion.txt"
                 : "aerospace-runtime-error.txt",
             title: "AeroSpace Runtime Error",
             message: message
         )
     }
-    if !recursionDetectorDuringTermination.get() {
-        recursionDetectorDuringTermination.set(true)
-        DispatchQueue.main.asyncAndWait {
-            terminationHandler.beforeTermination()
+    if !recursionDetectorDuringTermination {
+        let semaphore = DispatchSemaphore(value: 0)
+        Task {
+            defer { semaphore.signal() }
+            try await $recursionDetectorDuringTermination.withValue(true) {
+                try await terminationHandler.beforeTermination()
+            }
         }
+        semaphore.wait()
     }
     fatalError("\n" + message)
 }
 
-public enum RefreshSessionEvent {
+public enum RefreshSessionEvent: Sendable, CustomStringConvertible {
     case globalObserver(String)
     case globalObserverLeftMouseUp
     case menuBarButton
@@ -64,6 +76,20 @@ public enum RefreshSessionEvent {
     case socketServer
     case resetManipulatedWithMouse
     case ax(String)
+
+    public var description: String {
+        switch self {
+            case .ax(let str): "ax(\(str))"
+            case .globalObserver(let str): "globalObserver(\(str))"
+            case .globalObserverLeftMouseUp: "globalObserverLeftMouseUp"
+            case .hotkeyBinding: "hotkeyBinding"
+            case .menuBarButton: "menuBarButton"
+            case .resetManipulatedWithMouse: "resetManipulatedWithMouse"
+            case .socketServer: " socketServer"
+            case .startup1: "startup1"
+            case .startup2: "startup2"
+        }
+    }
 }
 
 public func throwT<T>(_ error: Error) throws -> T {
@@ -73,14 +99,14 @@ public func throwT<T>(_ error: Error) throws -> T {
 public func printStacktrace() { print(getStringStacktrace()) }
 public func getStringStacktrace() -> String { Thread.callStackSymbols.joined(separator: "\n") }
 
-@inlinable public func error(
+@inlinable public func die(
     _ message: String = "",
     file: String = #fileID,
     line: Int = #line,
     column: Int = #column,
     function: String = #function
 ) -> Never {
-    errorT(message, file: file, line: line, column: column, function: function)
+    dieT(message, file: file, line: line, column: column, function: function)
 }
 
 public func check(
@@ -92,7 +118,7 @@ public func check(
     function: String = #function
 ) {
     if !condition {
-        error(message(), file: file, line: line, column: column, function: function)
+        die(message(), file: file, line: line, column: column, function: function)
     }
 }
 
@@ -168,4 +194,21 @@ public func cliError(_ message: String = "") -> Never {
 public func cliErrorT<T>(_ message: String = "") -> T {
     printStderr(message)
     exit(1)
+}
+
+@inlinable
+public func allowOnlyCancellationError<T>(isolation: isolated (any Actor)? = #isolation, _ block: () async throws -> sending T) async throws -> sending T {
+    do {
+        return try await block()
+    } catch let e as CancellationError {
+        throw e
+    } catch {
+        die("throws must only be used for CancellationError")
+    }
+}
+
+public func checkCancellation() throws {
+    if Task.isCancelled {
+        throw CancellationError()
+    }
 }

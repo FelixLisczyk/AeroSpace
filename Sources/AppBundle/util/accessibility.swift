@@ -300,16 +300,20 @@ private func tryGetWindow(_ any: Any?) -> AXUIElement? {
 }
 
 extension AXUIElement {
-    func get<Attr: ReadableAttr>(_ attr: Attr, signpostEvent: String? = nil, function: String = #function) -> Attr.T? {
-        let state = signposter.beginInterval("AXUIElement.get", "\(function): \(signpostEvent)")
+    func get<Attr: ReadableAttr>(_ attr: Attr) -> Attr.T? {
+        let state = signposter.beginInterval(#function, "axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken?.idForDebug)")
         defer {
-            signposter.endInterval("AXUIElement.get", state)
+            signposter.endInterval(#function, state)
         }
         var raw: AnyObject?
         return AXUIElementCopyAttributeValue(self, attr.key as CFString, &raw) == .success ? attr.getter(raw!) : nil
     }
 
     @discardableResult func set<Attr: WritableAttr>(_ attr: Attr, _ value: Attr.T) -> Bool {
+        let state = signposter.beginInterval(#function, "axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken?.idForDebug)")
+        defer {
+            signposter.endInterval(#function, state)
+        }
         guard let value = attr.setter(value) else { return false }
         return AXUIElementSetAttributeValue(self, attr.key as CFString, value) == .success
     }
@@ -335,31 +339,8 @@ extension AXUIElement {
 }
 
 extension AXObserver {
-    private static func newImpl(_ pid: pid_t, _ handler: AXObserverCallback) -> AXObserver? {
+    static func new(_ pid: pid_t, _ handler: AXObserverCallback) -> AXObserver? {
         var observer: AXObserver? = nil
         return AXObserverCreate(pid, handler, &observer) == .success ? observer : nil
     }
-
-    static func observe(_ pid: pid_t, _ notifKey: String, _ ax: AXUIElement, _ handler: AXObserverCallback, data: AnyObject?) -> AXObserver? {
-        guard let observer = newImpl(pid, handler) else { return nil }
-        let dataPtr: UnsafeMutableRawPointer? = data.flatMap { Unmanaged.passUnretained($0).toOpaque() }
-        // kAXWindowCreatedNotification takes more than 1 attempt to subscribe. Probably, it's because the application
-        // is still initializing
-        for _ in 1 ... SUBSCRIBE_OBSERVER_ATTEMPTS_THRESHOLD {
-            if AXObserverAddNotification(observer, ax, notifKey as CFString, dataPtr) == .success {
-                CFRunLoopAddSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(observer), .defaultMode)
-                return observer
-            }
-        }
-        return nil
-    }
 }
-
-struct AxObserverWrapper {
-    let obs: AXObserver
-    let ax: AXUIElement
-    let notif: CFString
-}
-
-/// Pure heuristic. Usually it takes around 1000 attempts to subscribe
-private let SUBSCRIBE_OBSERVER_ATTEMPTS_THRESHOLD = 1 // todo drop

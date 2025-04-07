@@ -11,11 +11,13 @@ public func menuBar(viewModel: TrayMenuModel) -> some Scene { // todo should it 
         Button("Copy to clipboard") { identification.copyToClipboard() }
             .keyboardShortcut("C", modifiers: .command)
         Divider()
-        if viewModel.isEnabled {
+        if let token: RunSessionGuard = .isServerEnabled {
             Text("Workspaces:")
             ForEach(viewModel.workspaces, id: \.name) { workspace in
                 Button {
-                    refreshSession(.menuBarButton, screenIsDefinitelyUnlocked: true) { _ = Workspace.get(byName: workspace.name).focusWorkspace() }
+                    Task {
+                        try await runSession(.menuBarButton, token) { _ = Workspace.get(byName: workspace.name).focusWorkspace() }
+                    }
                 } label: {
                     Toggle(isOn: .constant(workspace.isFocused)) {
                         Text(workspace.name + workspace.suffix).font(.system(.body, design: .monospaced))
@@ -25,8 +27,11 @@ public func menuBar(viewModel: TrayMenuModel) -> some Scene { // todo should it 
             Divider()
         }
         Button(viewModel.isEnabled ? "Disable" : "Enable") {
-            refreshSession(.menuBarButton, screenIsDefinitelyUnlocked: true) {
-                _ = EnableCommand(args: EnableCmdArgs(rawArgs: [], targetState: .toggle)).run(.defaultEnv, .emptyStdin)
+            Task {
+                try await runSession(.menuBarButton, .forceRun) { () throws in
+                    _ = try await EnableCommand(args: EnableCmdArgs(rawArgs: [], targetState: .toggle))
+                        .run(.defaultEnv, .emptyStdin)
+                }
             }
         }.keyboardShortcut("E", modifiers: .command)
         let editor = getTextEditorToOpenConfig()
@@ -41,15 +46,19 @@ public func menuBar(viewModel: TrayMenuModel) -> some Scene { // todo should it 
                 case .ambiguousConfigError:
                     fallbackConfig.open(with: editor)
             }
-        }.keyboardShortcut("O", modifiers: .command)
-        if viewModel.isEnabled {
+        }.keyboardShortcut(",", modifiers: .command)
+        if let token: RunSessionGuard = .isServerEnabled {
             Button("Reload config") {
-                refreshSession(.menuBarButton, screenIsDefinitelyUnlocked: true) { _ = reloadConfig() }
+                Task {
+                    try await runSession(.menuBarButton, token) { _ = reloadConfig() }
+                }
             }.keyboardShortcut("R", modifiers: .command)
         }
         Button("Quit \(aeroSpaceAppName)") {
-            terminationHandler.beforeTermination()
-            terminateApp()
+            Task {
+                defer { terminateApp() }
+                try await terminationHandler.beforeTermination()
+            }
         }.keyboardShortcut("Q", modifiers: .command)
     } label: {
         if viewModel.isEnabled {

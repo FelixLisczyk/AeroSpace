@@ -52,11 +52,11 @@ extension TreeNode {
         } else if let container = self as? MacosPopupWindowsContainer {
             return .macosPopupWindowsContainer(container)
         } else {
-            error("Unknown tree")
+            die("Unknown tree")
         }
     }
 
-    func tilingTreeNodeCasesOrThrow() -> TilingTreeNodeCases {
+    func tilingTreeNodeCasesOrDie() -> TilingTreeNodeCases {
         if let window = self as? Window {
             return .window(window)
         } else if let tilingContainer = self as? TilingContainer {
@@ -70,7 +70,7 @@ extension TreeNode {
 extension NonLeafTreeNodeObject {
     var cases: NonLeafTreeNodeCases {
         if self is Window {
-            error("Windows are leaf nodes. They can't have children")
+            die("Windows are leaf nodes. They can't have children")
         } else if let workspace = self as? Workspace {
             return .workspace(workspace)
         } else if let tilingContainer = self as? TilingContainer {
@@ -84,7 +84,7 @@ extension NonLeafTreeNodeObject {
         } else if let container = self as? MacosPopupWindowsContainer {
             return .macosPopupWindowsContainer(container)
         } else {
-            error("Unknown tree \(self)")
+            die("Unknown tree \(self)")
         }
     }
 
@@ -112,7 +112,6 @@ enum ChildParentRelation: Equatable {
     case shimContainerRelation
 }
 
-@MainActor
 func getChildParentRelation(child: TreeNode, parent: NonLeafTreeNodeObject) -> ChildParentRelation {
     if let relation = getChildParentRelationOrNil(child: child, parent: parent) {
         return relation
@@ -120,12 +119,10 @@ func getChildParentRelation(child: TreeNode, parent: NonLeafTreeNodeObject) -> C
     illegalChildParentRelation(child: child, parent: parent)
 }
 
-@MainActor
 func illegalChildParentRelation(child: TreeNode, parent: NonLeafTreeNodeObject?) -> Never {
-    error("Illegal child-parent relation. Child: \(child), Parent: \((parent ?? child.parent).optionalToPrettyString())")
+    die("Illegal child-parent relation. Child: \(child), Parent: \((parent ?? child.parent).optionalToPrettyString())")
 }
 
-@MainActor
 func getChildParentRelationOrNil(child: TreeNode, parent: NonLeafTreeNodeObject) -> ChildParentRelation? {
     return switch (child.nodeCases, parent.cases) {
         case (.workspace, _): nil

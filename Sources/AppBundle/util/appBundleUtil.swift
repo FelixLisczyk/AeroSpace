@@ -17,8 +17,10 @@ func stringType(of some: Any) -> String {
 func interceptTermination(_ _signal: Int32) {
     signal(_signal, { signal in
         check(Thread.current.isMainThread)
-        MainActor.assumeIsolated { terminationHandler.beforeTermination() }
-        exit(signal)
+        Task {
+            defer { exit(signal) }
+            try await terminationHandler.beforeTermination()
+        }
     } as sig_t)
 }
 
@@ -28,8 +30,8 @@ func initTerminationHandler() {
 }
 
 private struct AppServerTerminationHandler: TerminationHandler {
-    func beforeTermination() {
-        makeAllWindowsVisibleAndRestoreSize()
+    func beforeTermination() async throws {
+        try await makeAllWindowsVisibleAndRestoreSize()
         if isDebug {
             sendCommandToReleaseServer(args: ["enable", "on"])
         }
@@ -37,19 +39,19 @@ private struct AppServerTerminationHandler: TerminationHandler {
 }
 
 @MainActor
-private func makeAllWindowsVisibleAndRestoreSize() {
+private func makeAllWindowsVisibleAndRestoreSize() async throws {
     // Make all windows fullscreen before Quit
     for (_, window) in MacWindow.allWindowsMap {
         // makeAllWindowsVisibleAndRestoreSize may be invoked when something went wrong (e.g. some windows are unbound)
         // that's why it's not allowed to use `.parent` call in here
-        let monitor = window.getCenter()?.monitorApproximation ?? mainMonitor
+        let monitor = try await window.getCenter()?.monitorApproximation ?? mainMonitor
         let monitorVisibleRect = monitor.visibleRect
         let windowSize = window.lastFloatingSize ?? CGSize(width: monitorVisibleRect.width, height: monitorVisibleRect.height)
         let point = CGPoint(
             x: (monitorVisibleRect.width - windowSize.width) / 2,
             y: (monitorVisibleRect.height - windowSize.height) / 2
         )
-        _ = window.setFrame(point, windowSize)
+        try await window.setAxFrameDuringTermination(point, windowSize)
     }
 }
 
@@ -58,23 +60,9 @@ extension String? {
 }
 
 @MainActor
-var apps: [AbstractApp] {
-    if isUnitTest {
-        return appForTests.asList()
-    }
-    var result = [AbstractApp]()
-    for _app in NSWorkspace.shared.runningApplications where _app.activationPolicy == .regular {
-        if let app = _app.macApp {
-            result.append(app)
-        }
-    }
-    return result
-}
-
-@MainActor
 func terminateApp() -> Never {
     NSApplication.shared.terminate(nil)
-    error("Unreachable code")
+    die("Unreachable code")
 }
 
 extension String {
@@ -93,7 +81,7 @@ func + (a: CGPoint, b: CGPoint) -> CGPoint {
     CGPoint(x: a.x + b.x, y: a.y + b.y)
 }
 
-extension CGPoint: Copyable {}
+extension CGPoint: ConvenienceCopyable {}
 
 extension CGPoint {
     /// Distance to ``Rect`` outline frame
@@ -106,7 +94,7 @@ extension CGPoint {
                 distance(to: rect.topRightCorner),
                 distance(to: rect.bottomLeftCorner),
             ]
-        return list.minOrThrow()
+        return list.minOrDie()
     }
 
     func coerceIn(rect: Rect) -> CGPoint {
@@ -128,7 +116,7 @@ extension CGPoint {
     var monitorApproximation: Monitor {
         let monitors = monitors
         return monitors.first(where: { $0.rect.contains(self) })
-            ?? monitors.minByOrThrow { distanceToRectFrame(to: $0.rect) }
+            ?? monitors.minByOrDie { distanceToRectFrame(to: $0.rect) }
     }
 }
 

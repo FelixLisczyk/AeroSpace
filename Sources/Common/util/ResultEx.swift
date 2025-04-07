@@ -44,7 +44,7 @@ public extension Result {
 
 public extension Result {
     @discardableResult
-    func getOrThrow(
+    func getOrDie(
         _ msgPrefix: String = "",
         file: String = #fileID,
         line: Int = #line,
@@ -55,7 +55,7 @@ public extension Result {
             case .success(let suc):
                 return suc
             case .failure(let e):
-                error(msgPrefix + e.localizedDescription, file: file, line: line, column: column, function: function)
+                die(msgPrefix + e.localizedDescription, file: file, line: line, column: column, function: function)
         }
     }
 }

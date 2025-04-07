@@ -13,8 +13,8 @@ extension Array {
         return found
     }
 
-    func firstOrThrow(where predicate: (Self.Element) throws -> Bool) rethrows -> Self.Element {
-        try first(where: predicate) ?? errorT("Can't find the element")
+    func firstOrDie(where predicate: (Self.Element) throws -> Bool) rethrows -> Self.Element {
+        try first(where: predicate) ?? dieT("Can't find the element")
     }
 }
 

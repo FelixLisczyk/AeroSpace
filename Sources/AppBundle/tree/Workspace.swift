@@ -28,7 +28,7 @@ private func getStubWorkspace(forPoint point: CGPoint) -> Workspace {
     return (1 ... Int.max).lazy
         .map { Workspace.get(byName: String($0)) }
         .first { $0.isEffectivelyEmpty && !$0.isVisible && !preservedNames.contains($0.name) && $0.forceAssignedMonitor == nil }
-        ?? errorT("Can't create empty workspace")
+        ?? dieT("Can't create empty workspace")
 }
 
 class Workspace: TreeNode, NonLeafTreeNodeObject, Hashable, Comparable {
@@ -37,17 +37,18 @@ class Workspace: TreeNode, NonLeafTreeNodeObject, Hashable, Comparable {
     /// `assignedMonitorPoint` must be interpreted only when the workspace is invisible
     fileprivate var assignedMonitorPoint: CGPoint? = nil
 
+    @MainActor
     private init(_ name: String) {
         self.name = name
         self.nameLogicalSegments = name.toLogicalSegments()
         super.init(parent: NilTreeNode.instance, adaptiveWeight: 0, index: 0)
     }
 
-    static var all: [Workspace] {
+    @MainActor static var all: [Workspace] {
         workspaceNameToWorkspace.values.sorted()
     }
 
-    static func get(byName name: String) -> Workspace {
+    @MainActor static func get(byName name: String) -> Workspace {
         if let existing = workspaceNameToWorkspace[name] {
             return existing
         } else {
@@ -66,9 +67,10 @@ class Workspace: TreeNode, NonLeafTreeNodeObject, Hashable, Comparable {
     }
 
     override func setWeight(_ targetOrientation: Orientation, _ newValue: CGFloat) {
-        error("It's not possible to change weight of Workspace")
+        die("It's not possible to change weight of Workspace")
     }
 
+    @MainActor
     var description: String {
         let preservedNames = config.preservedWorkspaceNames.toSet()
         let description = [
@@ -80,6 +82,7 @@ class Workspace: TreeNode, NonLeafTreeNodeObject, Hashable, Comparable {
         return "Workspace(\(description))"
     }
 
+    @MainActor
     static func garbageCollectUnusedWorkspaces() {
         let preservedNames = config.preservedWorkspaceNames.toSet()
         for name in preservedNames {
@@ -102,7 +105,9 @@ class Workspace: TreeNode, NonLeafTreeNodeObject, Hashable, Comparable {
 }
 
 extension Workspace {
+    @MainActor
     var isVisible: Bool { visibleWorkspaceToScreenPoint.keys.contains(self) }
+    @MainActor
     var workspaceMonitor: Monitor {
         forceAssignedMonitor
             ?? visibleWorkspaceToScreenPoint[self]?.monitorApproximation

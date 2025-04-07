@@ -20,17 +20,35 @@ import Foundation
     }
 
     checkAccessibilityPermissions()
-    AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1.0)
     startUnixSocketServer()
     GlobalObserver.initObserver()
-    refreshAndLayout(.startup1, screenIsDefinitelyUnlocked: false, startup: true)
-    refreshSession(.startup2, screenIsDefinitelyUnlocked: false) {
-        if serverArgs.startedAtLogin {
-            _ = config.afterLoginCommand.runCmdSeq(.defaultEnv, .emptyStdin)
+    Task {
+        try await $isStartup.withValue(true) {
+            try await runRefreshSessionBlocking(.startup1, layoutWorkspaces: false)
+            try await runSession(.startup2, .checkServerIsEnabled) {
+                smartLayoutAtStartup()
+                if serverArgs.startedAtLogin {
+                    _ = try await config.afterLoginCommand.runCmdSeq(.defaultEnv, .emptyStdin)
+                }
+                _ = try await config.afterStartupCommand.runCmdSeq(.defaultEnv, .emptyStdin)
+            }
         }
-        _ = config.afterStartupCommand.runCmdSeq(.defaultEnv, .emptyStdin)
     }
 }
+
+@MainActor
+private func smartLayoutAtStartup() {
+    let workspace = focus.workspace
+    let root = workspace.rootTilingContainer
+    if root.children.count <= 3 {
+        root.layout = .tiles
+    } else {
+        root.layout = .accordion
+    }
+}
+
+@TaskLocal
+var isStartup: Bool = false
 
 struct ServerArgs: Sendable {
     var startedAtLogin = false
@@ -72,6 +90,8 @@ private func initServerArgs() {
             case "--started-at-login":
                 _serverArgs.startedAtLogin = true
                 args = Array(args.dropFirst())
+            case "-NSDocumentRevisionsDebugMode":
+                cliError("Xcode -> Edit Scheme ... -> Options -> Document Versions -> Allow debugging when browsing versions -> false")
             default:
                 cliError("Unrecognized flag '\(args.first!)'")
         }
