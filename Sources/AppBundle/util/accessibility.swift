@@ -257,13 +257,13 @@ enum Ax {
     )
     /// Returns windows visible on all monitors
     /// If some windows are located on not active macOS Spaces then they won't be returned
-    static let windowsAttr = ReadableAttrImpl<[AXUIElement]>(
+    static let windowsAttr = ReadableAttrImpl<[WindowIdAndAxUiElement]>(
         key: kAXWindowsAttribute,
-        getter: { ($0 as! NSArray).compactMap(tryGetWindow) }
+        getter: { ($0 as! NSArray).compactMap(windowOrNil) }
     )
-    static let focusedWindowAttr = ReadableAttrImpl<AXUIElement>(
+    static let focusedWindowAttr = ReadableAttrImpl<WindowIdAndAxUiElement>(
         key: kAXFocusedWindowAttribute,
-        getter: tryGetWindow
+        getter: windowOrNil
     )
     //static let mainWindowAttr = ReadableAttrImpl<AXUIElement>(
     //    key: kAXMainWindowAttribute,
@@ -292,49 +292,40 @@ enum Ax {
     //)
 }
 
-private func tryGetWindow(_ any: Any?) -> AXUIElement? {
+typealias WindowIdAndAxUiElement = (windowId: UInt32, ax: AXUIElement)
+
+private func windowOrNil(_ any: Any?) -> WindowIdAndAxUiElement? {
     guard let any else { return nil }
     let potentialWindow = any as! AXUIElement
     // Filter out non-window objects (e.g. Finder's desktop)
-    return potentialWindow.containingWindowId() != nil ? potentialWindow : nil
+    let windowId = potentialWindow.containingWindowId()
+    if let windowId {
+        return (windowId, potentialWindow)
+    } else {
+        return nil
+    }
 }
 
 extension AXUIElement {
     func get<Attr: ReadableAttr>(_ attr: Attr) -> Attr.T? {
-        let state = signposter.beginInterval(#function, "axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken?.idForDebug)")
-        defer {
-            signposter.endInterval(#function, state)
-        }
+        let state = signposter.beginInterval(#function, "attr: \(attr.key) axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken?.idForDebug)")
+        defer { signposter.endInterval(#function, state) }
         var raw: AnyObject?
         return AXUIElementCopyAttributeValue(self, attr.key as CFString, &raw) == .success ? attr.getter(raw!) : nil
     }
 
     @discardableResult func set<Attr: WritableAttr>(_ attr: Attr, _ value: Attr.T) -> Bool {
-        let state = signposter.beginInterval(#function, "axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken?.idForDebug)")
-        defer {
-            signposter.endInterval(#function, state)
-        }
+        let state = signposter.beginInterval(#function, "attr: \(attr.key) axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken?.idForDebug)")
+        defer { signposter.endInterval(#function, state) }
         guard let value = attr.setter(value) else { return false }
         return AXUIElementSetAttributeValue(self, attr.key as CFString, value) == .success
     }
 
-    func containingWindowId(signpostEvent: String? = nil, function: String = #function) -> CGWindowID? {
-        let state = signposter.beginInterval("AXUIElement.containingWindowId", "\(function): \(signpostEvent)")
-        defer {
-            signposter.endInterval("AXUIElement.containingWindowId", state)
-        }
+    func containingWindowId() -> CGWindowID? {
+        let state = signposter.beginInterval(#function, "axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken?.idForDebug)")
+        defer { signposter.endInterval(#function, state) }
         var cgWindowId = CGWindowID()
         return _AXUIElementGetWindow(self, &cgWindowId) == .success ? cgWindowId : nil
-    }
-
-    var center: CGPoint? {
-        guard let topLeft = get(Ax.topLeftCornerAttr) else { return nil }
-        guard let size = get(Ax.sizeAttr) else { return nil }
-        return CGPoint(x: topLeft.x + size.width / 2, y: topLeft.y + size.height)
-    }
-
-    func raise() -> Bool {
-        AXUIElementPerformAction(self, kAXRaiseAction as CFString) == AXError.success
     }
 }
 

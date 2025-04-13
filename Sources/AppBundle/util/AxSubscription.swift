@@ -8,13 +8,13 @@ class AxSubscription {
     let axThreadToken: AxAppThreadToken = axTaskLocalAppThreadToken ?? dieT("axTaskLocalAppThreadToken is not initialized")
     var notifKeys: Set<String> = []
 
-    init(obs: AXObserver, ax: AXUIElement) {
-        check(!Thread.current.isMainThread)
+    private init(obs: AXObserver, ax: AXUIElement) {
+        axThreadToken.checkEquals(axTaskLocalAppThreadToken)
         self.obs = obs
         self.ax = ax
     }
 
-    func subscribe(_ key: String) -> Bool {
+    private func subscribe(_ key: String, _ job: RunLoopJob) throws -> Bool {
         axThreadToken.checkEquals(axTaskLocalAppThreadToken)
         if AXObserverAddNotification(obs, ax, key as CFString, nil) == .success {
             notifKeys.insert(key)
@@ -24,15 +24,17 @@ class AxSubscription {
         }
     }
 
-    static func bulkSubscribe(_ nsApp: NSRunningApplication, _ ax: AXUIElement, _ handlerToNotifKeyMapping: HandlerToNotifKeyMapping) -> [AxSubscription] {
+    static func bulkSubscribe(_ nsApp: NSRunningApplication, _ ax: AXUIElement, _ job: RunLoopJob, _ handlerToNotifKeyMapping: HandlerToNotifKeyMapping) throws -> [AxSubscription] {
         var result: [AxSubscription] = []
         var visitedNotifKeys: Set<String> = []
         for (handler, notifKeys) in handlerToNotifKeyMapping {
-            guard let obs = AXObserver.new(nsApp.processIdentifier, handler.value) else { return [] }
+            try job.checkCancellation()
+            guard let obs = AXObserver.new(nsApp.processIdentifier, handler) else { return [] }
             let subscription = AxSubscription(obs: obs, ax: ax)
             for key: String in notifKeys {
-                check(visitedNotifKeys.insert(key).inserted)
-                if !subscription.subscribe(key) { return [] }
+                try job.checkCancellation()
+                assert(visitedNotifKeys.insert(key).inserted)
+                if try !subscription.subscribe(key, job) { return [] }
             }
             CFRunLoopAddSource(CFRunLoopGetCurrent(), AXObserverGetRunLoopSource(obs), .defaultMode)
             result.append(subscription)
@@ -49,12 +51,4 @@ class AxSubscription {
     }
 }
 
-typealias HandlerToNotifKeyMapping = [ManualHashable<Int, AXObserverCallback>: Set<String>]
-
-struct ManualHashable<K: Hashable, V>: Hashable, Equatable {
-    let key: K
-    let value: V
-
-    func hash(into hasher: inout Hasher) { hasher.combine(key) }
-    static func == (lhs: Self, rhs: Self) -> Bool { lhs.key == rhs.key }
-}
+typealias HandlerToNotifKeyMapping = [(AXObserverCallback, [String])]

@@ -7,31 +7,41 @@ private var activeRefreshTask: Task<(), any Error>? = nil
 @MainActor
 func runRefreshSession(
     _ event: RefreshSessionEvent,
-    screenIsDefinitelyUnlocked: Bool // todo rename
+    screenIsDefinitelyUnlocked: Bool, // todo rename
+    optimisticallyPreLayoutWorkspaces: Bool = false,
 ) {
     if screenIsDefinitelyUnlocked { resetClosedWindowsCache() }
     activeRefreshTask?.cancel()
-    activeRefreshTask = Task { try await runRefreshSessionBlocking(event) }
+    activeRefreshTask = Task { @MainActor in
+        try checkCancellation()
+        try await runRefreshSessionBlocking(event, optimisticallyPreLayoutWorkspaces: optimisticallyPreLayoutWorkspaces)
+    }
 }
 
 @MainActor
-func runRefreshSessionBlocking(_ event: RefreshSessionEvent, layoutWorkspaces shouldLayoutWorkspaces: Bool = true) async throws {
+func runRefreshSessionBlocking(
+    _ event: RefreshSessionEvent,
+    layoutWorkspaces shouldLayoutWorkspaces: Bool = true,
+    optimisticallyPreLayoutWorkspaces: Bool = false,
+) async throws {
     let state = signposter.beginInterval(#function, "event: \(event) axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken?.idForDebug)")
-    defer {
-        signposter.endInterval(#function, state)
-    }
+    defer { signposter.endInterval(#function, state) }
     if !TrayMenuModel.shared.isEnabled { return }
     try await $refreshSessionEventForDebug.withValue(event) {
-        try await refresh()
-        gcMonitors()
+        try await $_isStartup.withValue(event.isStartup) {
+            let nativeFocused = try await getNativeFocusedWindow()
+            if let nativeFocused { try await debugWindowsIfRecording(nativeFocused) }
+            updateFocusCache(nativeFocused)
 
-        let nativeFocused = try await getNativeFocusedWindow()
-        if let nativeFocused { try await debugWindowsIfRecording(nativeFocused) }
-        updateFocusCache(nativeFocused)
+            if shouldLayoutWorkspaces && optimisticallyPreLayoutWorkspaces { try await layoutWorkspaces() }
 
-        updateTrayText()
-        try await normalizeLayoutReason()
-        if shouldLayoutWorkspaces { try await layoutWorkspaces() }
+            try await refresh()
+            gcMonitors()
+
+            updateTrayText()
+            try await normalizeLayoutReason()
+            if shouldLayoutWorkspaces { try await layoutWorkspaces() }
+        }
     }
 }
 
@@ -42,34 +52,33 @@ func runSession<T>(
     body: @MainActor () async throws -> T
 ) async throws -> T {
     let state = signposter.beginInterval(#function, "event: \(event) axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken?.idForDebug)")
-    defer {
-        signposter.endInterval(#function, state)
-    }
+    defer { signposter.endInterval(#function, state) }
     activeRefreshTask?.cancel() // Give priority to runSession
     activeRefreshTask = nil
     return try await $refreshSessionEventForDebug.withValue(event) {
-        resetClosedWindowsCache()
+        try await $_isStartup.withValue(event.isStartup) {
+            resetClosedWindowsCache()
 
-        let nativeFocused = try await getNativeFocusedWindow()
-        if let nativeFocused { try await debugWindowsIfRecording(nativeFocused) }
-        updateFocusCache(nativeFocused)
-        let focusBefore = focus.windowOrNil
+            let nativeFocused = try await getNativeFocusedWindow()
+            if let nativeFocused { try await debugWindowsIfRecording(nativeFocused) }
+            updateFocusCache(nativeFocused)
+            let focusBefore = focus.windowOrNil
 
-        try await refreshModel()
-        let result = try await body()
-        try await refreshModel()
+            try await refreshModel()
+            let result = try await body()
+            try await refreshModel()
 
-        let focusAfter = focus.windowOrNil
+            let focusAfter = focus.windowOrNil
 
-        if focusBefore != focusAfter {
-            focusAfter?.nativeFocus() // syncFocusToMacOs
+            if focusBefore != focusAfter {
+                focusAfter?.nativeFocus() // syncFocusToMacOs
+            }
+
+            updateTrayText()
+            try await layoutWorkspaces()
+            runRefreshSession(event, screenIsDefinitelyUnlocked: false)
+            return result
         }
-
-        updateTrayText()
-        try await normalizeLayoutReason()
-        try await layoutWorkspaces()
-        runRefreshSession(event, screenIsDefinitelyUnlocked: false)
-        return result
     }
 }
 
@@ -81,7 +90,7 @@ struct RunSessionGuard: Sendable {
         command is EnableCommand ? .forceRun : .isServerEnabled
     }
     @MainActor
-    static var checkServerIsEnabled: RunSessionGuard { .isServerEnabled ?? dieT("server is disabled") }
+    static var checkServerIsEnabledOrDie: RunSessionGuard { .isServerEnabled ?? dieT("server is disabled") }
     static let forceRun = RunSessionGuard()
     private init() {}
 }
