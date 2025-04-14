@@ -76,9 +76,20 @@ struct FrozenFocus: AeroAny, Equatable, Sendable {
 }
 extension Window {
     @MainActor func focusWindow() -> Bool {
+        print("""
+        Window.focusWindow() called on:
+        - window: \(self)
+        - windowId: \(windowId)
+        - app: \(app.name ?? "nil")
+        """)
+
         if let focus = toLiveFocusOrNil() {
-            return setFocus(to: focus)
+            print("Window.focusWindow() attempting to focus window \(windowId) on workspace \(focus.workspace.name)")
+            let result = setFocus(to: focus)
+            print("Window.focusWindow() focus result: \(result)")
+            return result
         } else {
+            print("Window.focusWindow() failed - window \(windowId) has no visual workspace")
             // todo We should also exit-native-hidden/unminimize[/exit-native-fullscreen?] window if we want to fix ID-B6E178F2
             //      and retry to focus the window. Otherwise, it's not possible to focus minimized/hidden windows
             return false

@@ -6,11 +6,34 @@ struct WorkspaceCommand: Command {
     let args: WorkspaceCmdArgs
 
     func run(_ env: CmdEnv, _ io: CmdIo) -> Bool { // todo refactor
-        guard let target = args.resolveTargetOrReportError(env, io) else { return false }
+        print("""
+        WorkspaceCommand.run() started with:
+        - args: \(args)
+        - env: \(env)
+        - io: \(io)
+        - current focus: \(focus)
+        - previous focus: \(String(describing: _prevFocus))
+        - current workspace: \(focus.workspace.name)
+        - current window: \(String(describing: focus.windowOrNil))
+        - current monitor: \(focus.workspace.workspaceMonitor)
+        - prev workspace: \(_prevFocusedWorkspaceName ?? "nil")
+        - prev window: \(_prevFocus?.windowId.map { "\($0)" } ?? "nil")
+        """)
+        guard let target = args.resolveTargetOrReportError(env, io) else {
+            print("""
+            WorkspaceCommand.run() failed to resolve target:
+            - args: \(args)
+            - env: \(env)
+            - current workspace: \(focus.workspace.name)
+            """)
+            return false
+        }
+        print("WorkspaceCommand.run() resolved target: \(target)")
         let focusedWs = target.workspace
         let workspaceName: String
         switch args.target.val {
             case .relative(let isNext):
+                print("WorkspaceCommand.run() handling relative target (isNext: \(isNext))")
                 let workspace = getNextPrevWorkspace(
                     current: focusedWs,
                     isNext: isNext,
@@ -22,14 +45,18 @@ struct WorkspaceCommand: Command {
                 workspaceName = workspace.name
             case .direct(let name):
                 workspaceName = name.raw
+                print("WorkspaceCommand.run() handling direct target '\(workspaceName)'")
                 if args.autoBackAndForth && focusedWs.name == workspaceName {
+                    print("WorkspaceCommand.run() autoBackAndForth triggered for workspace '\(workspaceName)'")
                     return WorkspaceBackAndForthCommand(args: WorkspaceBackAndForthCmdArgs(rawArgs: [])).run(env, io)
                 }
         }
         if focusedWs.name == workspaceName {
+            print("WorkspaceCommand.run() no-op - already focused on workspace '\(workspaceName)'")
             io.err("Workspace '\(workspaceName)' is already focused. Tip: use --fail-if-noop to exit with non-zero code")
             return !args.failIfNoop
         } else {
+            print("WorkspaceCommand.run() focusing workspace '\(workspaceName)'")
             return Workspace.get(byName: workspaceName).focusWorkspace()
         }
     }
