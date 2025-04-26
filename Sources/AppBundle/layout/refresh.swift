@@ -27,7 +27,7 @@ func runRefreshSessionBlocking(
     let state = signposter.beginInterval(#function, "event: \(event) axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken?.idForDebug)")
     defer { signposter.endInterval(#function, state) }
     if !TrayMenuModel.shared.isEnabled { return }
-    try await $refreshSessionEventForDebug.withValue(event) {
+    try await $refreshSessionEvent.withValue(event) {
         try await $_isStartup.withValue(event.isStartup) {
             let nativeFocused = try await getNativeFocusedWindow()
             if let nativeFocused { try await debugWindowsIfRecording(nativeFocused) }
@@ -35,6 +35,7 @@ func runRefreshSessionBlocking(
 
             if shouldLayoutWorkspaces && optimisticallyPreLayoutWorkspaces { try await layoutWorkspaces() }
 
+            refreshModel()
             try await refresh()
             gcMonitors()
 
@@ -55,7 +56,7 @@ func runSession<T>(
     defer { signposter.endInterval(#function, state) }
     activeRefreshTask?.cancel() // Give priority to runSession
     activeRefreshTask = nil
-    return try await $refreshSessionEventForDebug.withValue(event) {
+    return try await $refreshSessionEvent.withValue(event) {
         try await $_isStartup.withValue(event.isStartup) {
             resetClosedWindowsCache()
 
@@ -64,18 +65,17 @@ func runSession<T>(
             updateFocusCache(nativeFocused)
             let focusBefore = focus.windowOrNil
 
-            try await refreshModel()
+            refreshModel()
             let result = try await body()
-            try await refreshModel()
+            refreshModel()
 
             let focusAfter = focus.windowOrNil
 
+            updateTrayText()
+            try await layoutWorkspaces()
             if focusBefore != focusAfter {
                 focusAfter?.nativeFocus() // syncFocusToMacOs
             }
-
-            updateTrayText()
-            try await layoutWorkspaces()
             runRefreshSession(event, screenIsDefinitelyUnlocked: false)
             return result
         }
@@ -96,9 +96,9 @@ struct RunSessionGuard: Sendable {
 }
 
 @MainActor
-func refreshModel() async throws {
+func refreshModel() {
     Workspace.garbageCollectUnusedWorkspaces()
-    try await checkOnFocusChangedCallbacks()
+    checkOnFocusChangedCallbacks()
     normalizeContainers()
 }
 

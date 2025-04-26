@@ -4,7 +4,9 @@ import Common
 class Window: TreeNode, Hashable {
     nonisolated let windowId: UInt32 // todo nonisolated keyword is no longer necessary?
     let app: any AbstractApp
-    override var parent: NonLeafTreeNodeObject { super.parent ?? dieT("Windows always have parent") }
+    override var parent: NonLeafTreeNodeObject {
+        super.parent ?? dieT("Windows must always have a parent. The Window was unbound at:\n\(unboundStacktrace ?? "nil")")
+    }
     var parentOrNilForTests: NonLeafTreeNodeObject? { super.parent }
     var lastFloatingSize: CGSize?
     var isFullscreen: Bool = false
@@ -51,7 +53,7 @@ class Window: TreeNode, Hashable {
     func getCenter() async throws -> CGPoint? { try await getAxRect()?.center }
 
     func setAxTopLeftCorner(_ point: CGPoint) { die("Not implemented") }
-    func setAxFrameDuringTermination(_ topLeft: CGPoint?, _ size: CGSize?) async throws { die("Not implemented") }
+    func setAxFrameBlocking(_ topLeft: CGPoint?, _ size: CGSize?) async throws { die("Not implemented") }
     func setAxFrame(_ topLeft: CGPoint?, _ size: CGSize?) { die("Not implemented") }
     func setSizeAsync(_ size: CGSize) { die("Not implemented") }
 }

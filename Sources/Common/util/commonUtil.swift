@@ -6,7 +6,7 @@ public let unixUserName = NSUserName()
 public let mainModeId = "main"
 
 @TaskLocal
-public var refreshSessionEventForDebug: RefreshSessionEvent? = nil
+public var refreshSessionEvent: RefreshSessionEvent? = nil
 
 @TaskLocal
 private var recursionDetectorDuringTermination = false
@@ -18,7 +18,7 @@ public func dieT<T>(
     column: Int = #column,
     function: String = #function
 ) -> T {
-    let _message = __message.contains("\n") ? "\n" + __message.indent() : __message
+    let _message = __message.contains("\n") ? "\n" + __message.prefixLines(with: "    ") : __message
     let thread = Thread.current
     let message =
         """
@@ -29,11 +29,11 @@ public func dieT<T>(
         Message: \(_message)
         Version: \(aeroSpaceAppVersion)
         Git hash: \(gitHash)
-        refreshSessionEvent: \(refreshSessionEventForDebug.optionalToPrettyString())
+        refreshSessionEvent: \(refreshSessionEvent.prettyDescription)
         Date: \(Date.now)
-        Thread name: \(thread.name.optionalToPrettyString())
+        Thread name: \(thread.name.prettyDescription)
         Is main thread: \(thread.isMainThread)
-        axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken.optionalToPrettyString())
+        axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken.prettyDescription)
         macOS version: \(ProcessInfo().operatingSystemVersionString)
         Coordinate: \(file):\(line):\(column) \(function)
         recursionDetectorDuringTermination: \(recursionDetectorDuringTermination)
@@ -75,6 +75,8 @@ public enum RefreshSessionEvent: Sendable, CustomStringConvertible {
     case socketServer
     case resetManipulatedWithMouse
     case ax(String)
+    case onFocusedMonitorChanged
+    case onFocusChanged
 
     public var isStartup: Bool {
         if case .startup = self { return true } else { return false }
@@ -90,6 +92,8 @@ public enum RefreshSessionEvent: Sendable, CustomStringConvertible {
             case .resetManipulatedWithMouse: "resetManipulatedWithMouse"
             case .socketServer: " socketServer"
             case .startup: "startup"
+            case .onFocusedMonitorChanged: "onFocusedMonitorChanged"
+            case .onFocusChanged: "onFocusChanged"
         }
     }
 }

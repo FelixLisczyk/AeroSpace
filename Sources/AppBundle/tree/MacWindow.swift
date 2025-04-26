@@ -54,18 +54,18 @@ final class MacWindow: Window {
     // }
 
     @MainActor // todo swift is stupid
-    func isWindowHeuristic() async throws -> Bool {
+    func isWindowHeuristic() async throws -> Bool { // todo cache
         try await macApp.isWindowHeuristic(windowId)
     }
 
     @MainActor // todo swift is stupid
-    func isDialogHeuristic() async throws -> Bool {
+    func isDialogHeuristic() async throws -> Bool { // todo cache
         try await macApp.isDialogHeuristic(windowId)
     }
 
     @MainActor // todo swift is stupid
-    func dumpAxInfo(_ prefix: String) async throws -> String {
-        try await macApp.dumpWindowAxInfo(windowId: windowId, prefix)
+    func dumpAxInfo() async throws -> [String: Json] {
+        try await macApp.dumpWindowAxInfo(windowId: windowId)
     }
 
     func setNativeFullscreen(_ value: Bool) {
@@ -183,7 +183,7 @@ final class MacWindow: Window {
     }
 
     @MainActor // todo swift is stupid
-    override func setAxFrameDuringTermination(_ topLeft: CGPoint?, _ size: CGSize?) async throws {
+    override func setAxFrameBlocking(_ topLeft: CGPoint?, _ size: CGSize?) async throws {
         try await macApp.setAxFrameBlocking(windowId, topLeft, size)
     }
 
