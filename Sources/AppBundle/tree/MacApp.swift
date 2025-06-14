@@ -81,7 +81,7 @@ final class MacApp: AbstractApp {
         setFrameJobs.removeValue(forKey: windowId)?.cancel()
         _ = withWindowAsync(windowId) { [windows] window, job in
             guard let closeButton = window.get(Ax.closeButtonAttr) else { return }
-            if AXUIElementPerformAction(closeButton, kAXPressAction as CFString) == .success {
+            if AXUIElementPerformAction(closeButton.cast, kAXPressAction as CFString) == .success {
                 windows.threadGuarded.removeValue(forKey: windowId)
             }
         }
@@ -99,7 +99,7 @@ final class MacApp: AbstractApp {
     func getFocusedWindow() async throws -> Window? {
         let windowId = try await thread?.runInLoop { [nsApp, axApp, windows] job in
             try axApp.threadGuarded.get(Ax.focusedWindowAttr)
-                .flatMap { try windows.threadGuarded.getOrRegisterAxWindow(windowId: $0.windowId, $0.ax, nsApp, job) }?
+                .flatMap { try windows.threadGuarded.getOrRegisterAxWindow(windowId: $0.windowId, $0.ax.cast, nsApp, job) }?
                 .windowId
         }
         guard let windowId else { return nil }
@@ -187,7 +187,7 @@ final class MacApp: AbstractApp {
     @MainActor // todo swift is stupid
     func isDialogHeuristic(_ windowId: UInt32) async throws -> Bool {
         try await withWindow(windowId) { [nsApp] window, job in
-            window.isDialogHeuristic(nsApp)
+            window.isDialogHeuristic(appBundleId: nsApp.bundleIdentifier)
         } == true
     }
 
@@ -315,6 +315,7 @@ final class MacApp: AbstractApp {
         for (_, job) in setFrameJobs {
             job.cancel()
         }
+        setFrameJobs = [:]
         thread?.runInLoopAsync { [windows, appAxSubscriptions, axApp] job in
             appAxSubscriptions.destroy() // Destroy AX objects in reverse order of their creation
             windows.destroy()

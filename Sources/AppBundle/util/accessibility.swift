@@ -259,9 +259,9 @@ enum Ax {
     /// If some windows are located on not active macOS Spaces then they won't be returned
     static let windowsAttr = ReadableAttrImpl<[WindowIdAndAxUiElement]>(
         key: kAXWindowsAttribute,
-        getter: { ($0 as! NSArray).compactMap(windowOrNil) }
+        getter: { ($0 as! NSArray).compactMap(windowOrNil).map { ($0.windowId, $0.ax.cast) } }
     )
-    static let focusedWindowAttr = ReadableAttrImpl<WindowIdAndAxUiElement>(
+    static let focusedWindowAttr = ReadableAttrImpl<WindowIdAndAxUiElementMock>(
         key: kAXFocusedWindowAttribute,
         getter: windowOrNil
     )
@@ -269,22 +269,23 @@ enum Ax {
     //    key: kAXMainWindowAttribute,
     //    getter: tryGetWindow
     //)
-    static let closeButtonAttr = ReadableAttrImpl<AXUIElement>(
+    static let closeButtonAttr = ReadableAttrImpl<any AxUiElementMock>(
         key: kAXCloseButtonAttribute,
-        getter: { ($0 as! AXUIElement) }
+        getter: castToAxUiElementMock
     )
     // Note! fullscreen is not the same as "zoom" (green plus)
-    static let fullscreenButtonAttr = ReadableAttrImpl<AXUIElement>(
+    static let fullscreenButtonAttr = ReadableAttrImpl<any AxUiElementMock>(
         key: kAXFullScreenButtonAttribute,
-        getter: { ($0 as! AXUIElement) }
+        getter: castToAxUiElementMock
     )
-    static let zoomButtonAttr = ReadableAttrImpl<AXUIElement>(
+    // green plus
+    static let zoomButtonAttr = ReadableAttrImpl<any AxUiElementMock>(
         key: kAXZoomButtonAttribute,
-        getter: { ($0 as! AXUIElement) }
+        getter: castToAxUiElementMock
     )
-    static let minimizeButtonAttr = ReadableAttrImpl<AXUIElement>(
+    static let minimizeButtonAttr = ReadableAttrImpl<any AxUiElementMock>(
         key: kAXMinimizeButtonAttribute,
-        getter: { ($0 as! AXUIElement) }
+        getter: castToAxUiElementMock
     )
     //static let growAreaAttr = ReadableAttrImpl<AXUIElement>(
     //    key: kAXGrowAreaAttribute,
@@ -292,11 +293,33 @@ enum Ax {
     //)
 }
 
-typealias WindowIdAndAxUiElement = (windowId: UInt32, ax: AXUIElement)
+let kAXAeroSynthetic = "Aero.synthetic"
 
-private func windowOrNil(_ any: Any?) -> WindowIdAndAxUiElement? {
+private func castToAxUiElementMock(_ a: AnyObject) -> AxUiElementMock {
+    if isUnitTest {
+        if let str = a as? String, let commaIndex = str.firstIndex(of: ",") {
+            let windowId = UInt32.init(String(str.prefix(upTo: commaIndex)).removePrefix("AXUIElement(AxWindowId="))
+            if let windowId {
+                return castToAxUiElementMock([
+                    "Aero.axWindowId": Json.uint32(windowId),
+                    kAXAeroSynthetic: Json.bool(true),
+                ] as AnyObject)
+            }
+        }
+        if let dict = a as? [String: Json] { // Convert from _SwiftDeferredNSDictionary<String, Json>
+            return dict as? AxUiElementMock ?? dieT("Cannot cast \(type(of: a)) to AxUiElementMock")
+        }
+        die("Can't convert \(a) to AxUiElementMock")
+    }
+    return a as! AXUIElement
+}
+
+typealias WindowIdAndAxUiElement = (windowId: UInt32, ax: AXUIElement)
+typealias WindowIdAndAxUiElementMock = (windowId: UInt32, ax: AxUiElementMock)
+
+private func windowOrNil(_ any: Any?) -> WindowIdAndAxUiElementMock? {
     guard let any else { return nil }
-    let potentialWindow = any as! AXUIElement
+    let potentialWindow = castToAxUiElementMock(any as AnyObject)
     // Filter out non-window objects (e.g. Finder's desktop)
     let windowId = potentialWindow.containingWindowId()
     if let windowId {
@@ -306,7 +329,7 @@ private func windowOrNil(_ any: Any?) -> WindowIdAndAxUiElement? {
     }
 }
 
-extension AXUIElement {
+extension AXUIElement: AxUiElementMock {
     func get<Attr: ReadableAttr>(_ attr: Attr) -> Attr.T? {
         let state = signposter.beginInterval(#function, "attr: \(attr.key) axTaskLocalAppThreadToken: \(axTaskLocalAppThreadToken?.idForDebug)")
         defer { signposter.endInterval(#function, state) }

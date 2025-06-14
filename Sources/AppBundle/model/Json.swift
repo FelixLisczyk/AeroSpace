@@ -1,7 +1,7 @@
+import AppKit
 import Common
-import Foundation
 
-enum Json: Encodable {
+enum Json: Encodable, Equatable {
     // vector
     case dict([String: Json])
     case array([Json])
@@ -25,11 +25,11 @@ enum Json: Encodable {
         }
     }
 
-    static func fromOrDie(_ value: Any?) -> Json {
-        if let value = value as? [String: Any] {
-            return .dict(value.mapValues(fromOrDie))
-        } else if let value = value as? [Any] {
-            return .array(value.map(fromOrDie))
+    static func newOrDie(_ value: Any?) -> Json {
+        if let value = value as? [String: Any?] {
+            return .dict(value.mapValues(newOrDie))
+        } else if let value = value as? [Any?] {
+            return .array(value.map(newOrDie))
         } else if let value = value as? Int {
             return .int(value)
         } else if let value = value as? UInt32 {
@@ -42,6 +42,28 @@ enum Json: Encodable {
             return .null
         } else {
             die("Can't parse \(String(describing: value)) (\(type(of: value))) to JSON")
+        }
+    }
+
+    var rawValue: Any? {
+        switch self {
+            case .null: nil
+
+            case .array(let x): x
+            case .dict(let x): x
+
+            case .bool(let x): x
+            case .int(let x): x
+            case .string(let x): x
+            case .uint32(let x): x
+        }
+    }
+
+    var asDictOrDie: [String: Json] {
+        if case .dict(let dict) = self {
+            dict
+        } else {
+            dieT("\(self) is not a dict")
         }
     }
 }

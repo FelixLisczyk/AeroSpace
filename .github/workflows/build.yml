@@ -13,6 +13,7 @@ on:
 jobs:
   build:
     strategy:
+      # fail-fast: false # Disable fail-fast in matrix
       matrix:
         # https://docs.github.com/en/actions/using-github-hosted-runners/using-github-hosted-runners/about-github-hosted-runners#standard-github-hosted-runners-for-public-repositories
         # https://github.com/actions/runner-images/blob/main/images/macos/macos-13-Readme.md
@@ -27,28 +28,32 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
+      - run: env # Debug
       - uses: actions/checkout@v3
-      - uses: nikitabobko/setup-swift@21e0b6448e6aa76937c51d4b172f6cba5e537cde # todo migrate to swiftly
-        with:
-          swift-version: '6.1.0'
-      - run: |
+      - name: xcode-select
+        run: |
+          sw_vers -productVersion
           if sw_vers -productVersion | grep -q "^13"; then # macOS 13
-            true
+            true # Xcode 16 is not supported on macOS 13 :(
           else
             sudo xcode-select -s "$XCODE_16_DEVELOPER_DIR" # Affects macOS SDK
           fi
-      - run: brew install bash fish xcbeautify
-      - run: env # Debug
+      - run: brew update && brew install bash fish xcbeautify swiftly
+      - run: swiftly init --skip-install --assume-yes --verbose && swiftly install
       - run: ./script/install-dep.sh --all
       - run: ./build-debug.sh
       - run: ./run-tests.sh
-        # "-" means "Sign to run locally". There is no aerospace-codesign-certificate in GH Actions
-        # build-release.sh takes too much time to complete in macos-13.
-        # Running build-release.sh only in macos-15, cuts the build time twice in GH Actions.
-      - name: ./build-release.sh on macos-15
+        # We build release artifacts only on the latest macOS because:
+        # 1. It cuts the build time twice on GH Actions
+        # 2. The latest Xcode version is not available on old macOS, and old Xcode versions bundle too old Swift version
+      - name: './build-release.sh # on macos-15'
         run: |
           sw_vers -productVersion
           if sw_vers -productVersion | grep -q "^15"; then
+            # "-" means "Sign to run locally". There is no aerospace-codesign-certificate on GH Actions
             ./build-release.sh --codesign-identity -
             ./install-from-sources.sh --dont-rebuild
           fi
+      - name: cat ./.release/xcodebuild.log
+        if: ${{ always() }}
+        run: 'if test -f ./.release/xcodebuild.log; then cat ./.release/xcodebuild.log; fi'
