@@ -26,7 +26,12 @@ public func menuBar(viewModel: TrayMenuModel) -> some Scene { // todo should it 
             }
             Divider()
         }
-        getExperimentalUISettingsMenu(viewModel: viewModel)
+        Button {
+            NSWorkspace.shared.open(URL(string: "https://github.com/sponsors/nikitabobko").orDie())
+        } label: {
+            Text("Sponsor AeroSpace on GitHub")
+            Text(sponsorshipPrompts.randomElement().orDie())
+        }
         Divider()
         Button(viewModel.isEnabled ? "Disable" : "Enable") {
             Task {
@@ -36,6 +41,7 @@ public func menuBar(viewModel: TrayMenuModel) -> some Scene { // todo should it 
                 }
             }
         }.keyboardShortcut("E", modifiers: .command)
+        getExperimentalUISettingsMenu(viewModel: viewModel)
         let editor = getTextEditorToOpenConfig()
         Button("Open config in '\(editor.lastPathComponent)'") {
             let fallbackConfig: URL = FileManager.default.homeDirectoryForCurrentUser.appending(path: configDotfileName)
@@ -75,7 +81,9 @@ public func menuBar(viewModel: TrayMenuModel) -> some Scene { // todo should it 
                     MenuBarLabel(viewModel.trayText, trayItems: viewModel.trayItems, workspaces: viewModel.workspaces)
             }
         } else {
-            MenuBarLabel("⏸️")
+            Image(systemName: "pause.circle.fill")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
         }
     }
 }
