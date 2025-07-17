@@ -83,6 +83,9 @@ extension AxUiElementMock {
         }
 
         if appBundleId == "com.sunsama.native-app" && get(Ax.titleAttr) == "Sunsama Focus Bar" {
+            return false
+        }
+
         if activationPolicy == .accessory && get(Ax.closeButtonAttr) == nil {
             return false
         }
