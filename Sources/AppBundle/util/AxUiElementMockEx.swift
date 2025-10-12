@@ -84,6 +84,14 @@ extension AxUiElementMock {
             return false
         }
 
+        // Ignore Xcode windows that don't have a window title or have an empty window title
+        if appBundleId == "com.apple.dt.Xcode" {
+            let title = get(Ax.titleAttr) ?? ""
+            if title.isEmpty {
+                return false
+            }
+        }
+
         if activationPolicy == .accessory && get(Ax.closeButtonAttr) == nil && appBundleId != "com.valvesoftware.steam.helper" {
             return false
         }
