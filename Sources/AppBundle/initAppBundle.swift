@@ -11,18 +11,18 @@ import Foundation
         interceptTermination(SIGINT)
         interceptTermination(SIGKILL)
     }
-    if !reloadConfig() {
-        check(reloadConfig(forceConfigUrl: defaultConfigUrl))
-    }
-
-    checkAccessibilityPermissions()
-    startUnixSocketServer()
-    GlobalObserver.initObserver()
     Task {
+        if try await !reloadConfig() {
+            check(try await reloadConfig(forceConfigUrl: defaultConfigUrl))
+        }
+
+        checkAccessibilityPermissions()
+        startUnixSocketServer()
+        GlobalObserver.initObserver()
         Workspace.garbageCollectUnusedWorkspaces() // init workspaces
         _ = Workspace.all.first?.focusWorkspace()
         try await runRefreshSessionBlocking(.startup, layoutWorkspaces: false)
-        try await runSession(.startup, .checkServerIsEnabledOrDie) {
+        try await runLightSession(.startup, .checkServerIsEnabledOrDie) {
             smartLayoutAtStartup()
             _ = try await config.afterStartupCommand.runCmdSeq(.defaultEnv, .emptyStdin)
         }
@@ -61,10 +61,10 @@ private let serverHelp = """
                               Useful if you want to use only debug-windows or other query commands.
     """
 
-private nonisolated(unsafe) var _serverArgs = ServerArgs()
+nonisolated(unsafe) private var _serverArgs = ServerArgs()
 var serverArgs: ServerArgs { _serverArgs }
 private func initServerArgs() {
-    let args: [String] = Array(CommandLine.arguments.dropFirst())
+    let args = CommandLine.arguments.slice(1...) ?? []
     if args.contains(where: { $0 == "-h" || $0 == "--help" }) {
         print(serverHelp)
         exit(0)

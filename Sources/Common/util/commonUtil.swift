@@ -16,7 +16,7 @@ public func dieT<T>(
     file: String = #fileID,
     line: Int = #line,
     column: Int = #column,
-    function: String = #function
+    function: String = #function,
 ) -> T {
     let _message = __message.contains("\n") ? "\n" + __message.prefixLines(with: "    ") : __message
     let thread = Thread.current
@@ -77,6 +77,7 @@ public enum RefreshSessionEvent: Sendable, CustomStringConvertible {
     case ax(String)
     case onFocusedMonitorChanged
     case onFocusChanged
+    case onModeChanged
 
     public var isStartup: Bool {
         if case .startup = self { return true } else { return false }
@@ -94,6 +95,7 @@ public enum RefreshSessionEvent: Sendable, CustomStringConvertible {
             case .startup: "startup"
             case .onFocusedMonitorChanged: "onFocusedMonitorChanged"
             case .onFocusChanged: "onFocusChanged"
+            case .onModeChanged: "onModeChanged"
         }
     }
 }
