@@ -15,7 +15,7 @@ enum AxUiElementWindowType: String {
     }
 }
 
-// Covered by tests in ./axDumps in the repor root
+// Covered by tests in ./axDumps in the repo root
 extension AxUiElementMock {
     // 'isDialogHeuristic' function name is referenced in the guide
     func isDialogHeuristic(
@@ -119,15 +119,13 @@ extension AxUiElementMock {
             return false
         }
 
-        // Ignore Xcode windows that don't have a window title or have an empty window title
-        if id == .xcode {
-            let title = get(Ax.titleAttr) ?? ""
-            if title.isEmpty {
-                return false
-            }
+        lazy var fullscreenButton = get(Ax.fullscreenButtonAttr)
+
+        if id == .xcode && get(Ax.identifierAttr) == "open_quickly" {
+            return false
         }
 
-        if id == .iterm2 && get(Ax.fullscreenButtonAttr) == nil {
+        if id == .iterm2 && fullscreenButton == nil {
             return false
         }
 
@@ -153,7 +151,7 @@ extension AxUiElementMock {
         // - Finder preview (hit space) (subrole == "Quick Look")
         // - Firefox non-native video fullscreen (about:config -> full-screen-api.macos-native-full-screen -> false, subrole == AXUnknown)
         return get(Ax.closeButtonAttr) != nil ||
-            get(Ax.fullscreenButtonAttr) != nil ||
+            fullscreenButton != nil ||
             get(Ax.zoomButtonAttr) != nil ||
             get(Ax.minimizeButtonAttr) != nil ||
 
