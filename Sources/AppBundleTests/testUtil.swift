@@ -42,22 +42,22 @@ func setUpWorkspacesForTests() {
 
 extension ParsedCmd {
     var errorOrNil: String? {
-        if case .failure(let e) = self {
-            return e
-        } else {
-            return nil
+        return switch self {
+            case .failure(let e): e.msg
+            case .cmd, .help: nil
         }
     }
 
-    var cmdOrDie: T { cmdOrNil ?? dieT() }
+    var cmdOrDie: T { cmdOrNil ?? dieT("\(self)") }
 }
 
-func testParseCommandFail(_ command: String, msg expected: String) {
+func testParseCommandFail(_ command: String, msg expectedMsg: String, exitCode expectedExitCode: Int32, file: StaticString = #filePath, line: UInt = #line) {
     let parsed = parseCommand(command)
     switch parsed {
         case .cmd(let command): XCTFail("\(command) isn't supposed to be parcelable")
-        case .failure(let msg): assertEquals(msg, expected)
         case .help: die() // todo test help
+        case .failure(let failure):
+            assertEquals(failure, .init(expectedMsg, expectedExitCode), file: file, line: line)
     }
 }
 
@@ -84,10 +84,18 @@ extension MoveNodeToWorkspaceCmdArgs {
 }
 
 extension HotkeyBinding {
-    init(_ modifiers: NSEvent.ModifierFlags, _ keyCode: Key, _ commands: [any Command]) {
+    init(_ modifiers: NSEvent.ModifierFlags, _ keyCode: Key, _ commands: Shell<any Command>) {
         let descriptionWithKeyNotation = modifiers.isEmpty
             ? keyCode.toString()
             : modifiers.toString() + "-" + keyCode.toString()
         self.init(modifiers, keyCode, commands, descriptionWithKeyNotation: descriptionWithKeyNotation)
     }
 }
+
+extension FocusCommand {
+    static func new(direction: CardinalDirection) -> FocusCommand {
+        FocusCommand(args: FocusCmdArgs(rawArgs: [], cardinalOrDfsDirection: .direction(direction)))
+    }
+}
+
+func parseCommand(_ raw: String) -> ParsedCmd<Shell<any Command>> { parseCommand(raw, allowExecAndForget: true, allowEval: true) }

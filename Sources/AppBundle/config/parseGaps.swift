@@ -1,13 +1,12 @@
 import Common
-import TOMLKit
 
-struct Gaps: ConvenienceCopyable, Equatable, Sendable {
+struct Gaps: ConvenienceMutable, Equatable, Sendable {
     var inner: Inner
     var outer: Outer
 
     static let zero = Gaps(inner: .zero, outer: .zero)
 
-    struct Inner: ConvenienceCopyable, Equatable, Sendable {
+    struct Inner: ConvenienceMutable, Equatable, Sendable {
         var vertical: DynamicConfigValue<Int>
         var horizontal: DynamicConfigValue<Int>
 
@@ -24,7 +23,7 @@ struct Gaps: ConvenienceCopyable, Equatable, Sendable {
         }
     }
 
-    struct Outer: ConvenienceCopyable, Equatable, Sendable {
+    struct Outer: ConvenienceMutable, Equatable, Sendable {
         var left: DynamicConfigValue<Int>
         var bottom: DynamicConfigValue<Int>
         var top: DynamicConfigValue<Int>
@@ -68,7 +67,7 @@ struct ResolvedGaps {
         let right: Int
     }
 
-    init(gaps: Gaps, monitor: any Monitor) {
+    @MainActor init(gaps: Gaps, monitor: any Monitor) {
         inner = .init(
             vertical: gaps.inner.vertical.getValue(for: monitor),
             horizontal: gaps.inner.horizontal.getValue(for: monitor),
@@ -89,25 +88,29 @@ private let gapsParser: [String: any ParserProtocol<Gaps>] = [
 ]
 
 private let innerParser: [String: any ParserProtocol<Gaps.Inner>] = [
-    "vertical": Parser(\.vertical) { value, backtrace, errors in parseDynamicValue(value, Int.self, 0, backtrace, &errors) },
-    "horizontal": Parser(\.horizontal) { value, backtrace, errors in parseDynamicValue(value, Int.self, 0, backtrace, &errors) },
+    "vertical": Parser(\.vertical, parseIntDynamicValue),
+    "horizontal": Parser(\.horizontal, parseIntDynamicValue),
 ]
 
 private let outerParser: [String: any ParserProtocol<Gaps.Outer>] = [
-    "left": Parser(\.left) { value, backtrace, errors in parseDynamicValue(value, Int.self, 0, backtrace, &errors) },
-    "bottom": Parser(\.bottom) { value, backtrace, errors in parseDynamicValue(value, Int.self, 0, backtrace, &errors) },
-    "top": Parser(\.top) { value, backtrace, errors in parseDynamicValue(value, Int.self, 0, backtrace, &errors) },
-    "right": Parser(\.right) { value, backtrace, errors in parseDynamicValue(value, Int.self, 0, backtrace, &errors) },
+    "left": Parser(\.left, parseIntDynamicValue),
+    "bottom": Parser(\.bottom, parseIntDynamicValue),
+    "top": Parser(\.top, parseIntDynamicValue),
+    "right": Parser(\.right, parseIntDynamicValue),
 ]
 
-func parseGaps(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace, _ errors: inout [TomlParseError]) -> Gaps {
-    parseTable(raw, .zero, gapsParser, backtrace, &errors)
+private func parseIntDynamicValue(_ raw: OrderedJson, _ backtrace: ConfigBacktrace, _ c: inout ConfigParserContext) -> DynamicConfigValue<Int> {
+    parseDynamicValue(raw, ofType: Int.self, 0, backtrace, &c)
 }
 
-func parseInner(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace, _ errors: inout [TomlParseError]) -> Gaps.Inner {
-    parseTable(raw, Gaps.Inner.zero, innerParser, backtrace, &errors)
+func parseGaps(_ raw: OrderedJson, _ backtrace: ConfigBacktrace, _ c: inout ConfigParserContext) -> Gaps {
+    parseTable(raw, .zero, gapsParser, backtrace, &c)
 }
 
-func parseOuter(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace, _ errors: inout [TomlParseError]) -> Gaps.Outer {
-    parseTable(raw, Gaps.Outer.zero, outerParser, backtrace, &errors)
+func parseInner(_ raw: OrderedJson, _ backtrace: ConfigBacktrace, _ c: inout ConfigParserContext) -> Gaps.Inner {
+    parseTable(raw, Gaps.Inner.zero, innerParser, backtrace, &c)
+}
+
+func parseOuter(_ raw: OrderedJson, _ backtrace: ConfigBacktrace, _ c: inout ConfigParserContext) -> Gaps.Outer {
+    parseTable(raw, Gaps.Outer.zero, outerParser, backtrace, &c)
 }

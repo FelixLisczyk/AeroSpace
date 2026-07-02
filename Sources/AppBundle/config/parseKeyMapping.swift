@@ -1,13 +1,12 @@
 import Common
 import HotKey
-import TOMLKit
 
 private let keyMappingParser: [String: any ParserProtocol<KeyMapping>] = [
     "preset": Parser(\.preset, parsePreset),
     "key-notation-to-key-code": Parser(\.rawKeyNotationToKeyCode, parseKeyNotationToKeyCode),
 ]
 
-struct KeyMapping: ConvenienceCopyable, Equatable, Sendable {
+struct KeyMapping: ConvenienceMutable, Equatable, Sendable {
     enum Preset: String, CaseIterable, Sendable {
         case qwerty, dvorak, colemak
     }
@@ -28,32 +27,31 @@ struct KeyMapping: ConvenienceCopyable, Equatable, Sendable {
     }
 }
 
-func parseKeyMapping(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace, _ errors: inout [TomlParseError]) -> KeyMapping {
-    parseTable(raw, KeyMapping(), keyMappingParser, backtrace, &errors)
+func parseKeyMapping(_ raw: OrderedJson, _ backtrace: ConfigBacktrace, _ c: inout ConfigParserContext) -> KeyMapping {
+    parseTable(raw, KeyMapping(), keyMappingParser, backtrace, &c)
 }
 
-private func parsePreset(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace) -> ParsedToml<KeyMapping.Preset> {
-    parseString(raw, backtrace).flatMap { parseEnum($0, KeyMapping.Preset.self).toParsedToml(backtrace) }
+private func parsePreset(_ raw: OrderedJson, _ backtrace: ConfigBacktrace) -> ResOrConfigParseDiagnostic<KeyMapping.Preset> {
+    parseString(raw, backtrace).flatMap { parseEnum($0, KeyMapping.Preset.self).toParsedConfig(backtrace) }
 }
 
-private func parseKeyNotationToKeyCode(_ raw: TOMLValueConvertible, _ backtrace: TomlBacktrace, _ errors: inout [TomlParseError]) -> [String: Key] {
+private func parseKeyNotationToKeyCode(_ raw: OrderedJson, _ backtrace: ConfigBacktrace, _ c: inout ConfigParserContext) -> [String: Key] {
     var result: [String: Key] = [:]
-    guard let table = raw.table else {
-        errors.append(expectedActualTypeError(expected: .table, actual: raw.type, backtrace))
+    guard let table = raw.asDictOrNil else {
+        c.errors.append(expectedActualTypeDiagnostic(expected: .table, actual: raw.tomlType, backtrace))
         return result
     }
-    for (key, value): (String, TOMLValueConvertible) in table {
+    for (key, value): (String, OrderedJson) in table {
         if isValidKeyNotation(key) {
             let backtrace = backtrace + .key(key)
-            if let value = parseString(value, backtrace).getOrNil(appendErrorTo: &errors) {
-                if let value = keyNotationToKeyCode[value] {
-                    result[key] = value
-                } else {
-                    errors.append(.semantic(backtrace, "'\(value)' is invalid key code"))
+            if let value = parseString(value, backtrace).getOrNil(appendErrorTo: &c.errors) {
+                switch keyNotationToKeyCode[value] {
+                    case let value?: result[key] = value
+                    case nil: c.errors.append(.init(backtrace, "\(value.singleQuoted) is invalid key code"))
                 }
             }
         } else {
-            errors.append(.semantic(backtrace, "'\(key)' is invalid key notation"))
+            c.errors.append(.init(backtrace, "\(key.singleQuoted) is invalid key notation"))
         }
     }
     return result

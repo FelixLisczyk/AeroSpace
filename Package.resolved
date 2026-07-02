@@ -1,15 +1,6 @@
 {
-  "originHash" : "120ba1d30192b339dc5c9d1461d2b3d1e329a17a4867b471290c07c6b3c0cb73",
+  "originHash" : "6466a3de6b03a7f9499cc6ad528be037cd42ee688a16c00bd96a3fa208099b1e",
   "pins" : [
-    {
-      "identity" : "antlr4",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/antlr/antlr4",
-      "state" : {
-        "revision" : "7ed420ff2c78d62883875c442d75f32e73bc86c8",
-        "version" : "4.13.1"
-      }
-    },
     {
       "identity" : "hotkey",
       "kind" : "remoteSourceControl",
@@ -38,12 +29,12 @@
       }
     },
     {
-      "identity" : "tomlkit",
+      "identity" : "tomldecoder",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/LebJe/TOMLKit",
+      "location" : "https://github.com/dduan/TOMLDecoder",
       "state" : {
-        "revision" : "404c4dd011743461bff12d00a5118d0ed59d630c",
-        "version" : "0.5.5"
+        "revision" : "fa1103a62b1c08cc08eabc58dda8b55887ff1622",
+        "version" : "0.4.4"
       }
     }
   ],
