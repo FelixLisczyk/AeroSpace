@@ -121,8 +121,12 @@ extension AxUiElementMock {
 
         lazy var fullscreenButton = get(Ax.fullscreenButtonAttr)
 
-        if id == .xcode && get(Ax.identifierAttr) == "open_quickly" {
-            return false
+        // Ignore Xcode windows that don't have a window title or have an empty window title
+        if id == .xcode {
+            let title = get(Ax.titleAttr) ?? ""
+            if title.isEmpty {
+                return false
+            }
         }
 
         if id == .iterm2 && fullscreenButton == nil {
