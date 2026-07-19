@@ -26,7 +26,8 @@ list-xcodes() {
         plist="$app/Contents/version.plist"
         test -f "$plist" || continue
         version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist" 2>/dev/null) || continue
-        echo "$version|$app"
+        build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$plist" 2>/dev/null) || continue
+        echo "$version|$build|$app"
     done
 }
 
@@ -34,17 +35,23 @@ is-newer() { # is-newer a b -> true if a > b (version compare)
     test "$1" != "$2" && test "$(printf '%s\n%s' "$1" "$2" | sort -V | tail -1)" == "$1"
 }
 
-stable_version="" stable_xcode=""
-latest_version="" latest_xcode=""
-while IFS='|' read -r version app; do
+is-newer-xcode() { # is-newer-xcode version build other-version other-build -> true if newer
+    is-newer "$1" "$3" || { test "$1" == "$3" && is-newer "$2" "$4"; }
+}
+
+stable_version="" stable_build="" stable_xcode=""
+latest_version="" latest_build="" latest_xcode=""
+while IFS='|' read -r version build app; do
     test -z "$version" && continue
-    if test -z "$latest_version" || is-newer "$version" "$latest_version"; then
+    if test -z "$latest_version" || is-newer-xcode "$version" "$build" "$latest_version" "$latest_build"; then
         latest_version=$version
+        latest_build=$build
         latest_xcode=$app
     fi
     if [[ "$app" != *[Bb]eta* ]]; then
-        if test -z "$stable_version" || is-newer "$version" "$stable_version"; then
+        if test -z "$stable_version" || is-newer-xcode "$version" "$build" "$stable_version" "$stable_build"; then
             stable_version=$version
+            stable_build=$build
             stable_xcode=$app
         fi
     fi
@@ -55,8 +62,8 @@ if test -z "$stable_xcode"; then
     exit 1
 fi
 
-echo "Building with stable Xcode $stable_version ($stable_xcode)"
-echo "Newest installed Xcode is $latest_version ($latest_xcode)"
+echo "Building with stable Xcode $stable_version ($stable_build; $stable_xcode)"
+echo "Newest installed Xcode is $latest_version ($latest_build; $latest_xcode)"
 
 original_dev_dir="$(xcode-select -p)"
 restore-xcode() {
@@ -96,7 +103,7 @@ if ! ./install-from-sources.sh --dont-rebuild; then
     if test "$latest_xcode" == "$stable_xcode"; then
         exit 1 # Nothing newer to retry with
     fi
-    echo "Homebrew install step failed under Xcode $stable_version; retrying with $latest_version..."
+    echo "Homebrew install step failed under Xcode $stable_version ($stable_build); retrying with $latest_version ($latest_build)..."
     sudo xcode-select -s "$latest_xcode/Contents/Developer"
     ./install-from-sources.sh --dont-rebuild
 fi
